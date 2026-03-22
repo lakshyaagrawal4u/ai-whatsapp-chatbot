@@ -1,5 +1,6 @@
 from flask import Flask, request
 import os
+import json
 from dotenv import load_dotenv
 import google.generativeai as genai
 import gspread
@@ -13,11 +14,16 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-pro")
 
-# Google Sheets setup
-scope = ["https://spreadsheets.google.com/feeds",
-         "https://www.googleapis.com/auth/drive"]
+# Google Sheets setup (🔥 FIXED)
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
 
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+# 👉 ENV se credentials load kar
+creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+
 client = gspread.authorize(creds)
 sheet = client.open("ClinicData").sheet1
 
@@ -33,7 +39,6 @@ def webhook():
     user_msg = request.values.get("Body", "").lower()
     user_number = request.values.get("From")
 
-    # Initialize user
     if user_number not in user_state:
         user_state[user_number] = None
         user_data[user_number] = {}
@@ -88,30 +93,35 @@ def webhook():
 
     # 🤖 GEMINI AI RESPONSE
     prompt = f"""
-    You are a clinic assistant chatbot.
+You are a clinic assistant chatbot.
 
-    Clinic Details:
-    - Doctor: Dr. Sharma
-    - Fees: ₹500
-    - Timing: 10 AM - 6 PM
-    - Services: Fever, Cold, Skin problems, General checkup
+Clinic Details:
+- Doctor: Dr. Sharma
+- Fees: ₹500
+- Timing: 10 AM - 6 PM
+- Services: Fever, Cold, Skin problems, General checkup
 
-    Rules:
-    - Do NOT give serious medical advice
-    - Suggest visiting clinic
-    - Be polite
+Rules:
+- Do NOT give serious medical advice
+- Suggest visiting clinic
+- Be polite
 
-    User: {user_msg}
-    """
+User: {user_msg}
+"""
 
-    ai_response = model.generate_content(prompt)
-    return respond(ai_response.text)
-
+    try:
+        ai_response = model.generate_content(prompt)
+        return respond(ai_response.text)
+    except:
+        return respond("Thoda issue aa gaya, please dubara try karein.")
 
 # Twilio response format
 def respond(message):
     return f"<Response><Message>{message}</Message></Response>"
 
+@app.route("/")
+def home():
+    return "Bot is running 🚀"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
